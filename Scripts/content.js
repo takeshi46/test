@@ -1,5 +1,16 @@
-(() => {
-  "use strict";
+// ==UserScript==
+// @name         ニコニコ動画 PiPコントローラー
+// @namespace    https://sp.nicovideo.jp/
+// @version      1.0
+// @description  ニコニコ動画でPiP(ピクチャーインピクチャー)機能を強化し、コメント表示の切り替えを可能にします
+// @author       YourName
+// @match        https://www.sp.nicovideo.jp/watch/*
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
+
+(function() {
+  'use strict';
 
   const videoSelector = "#watchVideoContainer > video";
   const commentSelector = "#jsPlayerCanvasComment > canvas";
@@ -28,12 +39,10 @@
 
     if (!video || !pipContext || currentId !== updateId) {
       if (video) video.style.visibility = "visible";
-      console.log("[NicoPiP] Stopping PiP update loop", { video: !!video, context: !!pipContext, idMatch: currentId === updateId });
       return;
     }
 
     if (commentEnabled && (!comment || !comment.parentElement || comment.width === 0 || comment.height === 0)) {
-      console.log("[NicoPiP] Comment layer invalid, retrying...");
       setTimeout(updatePiP, 100);
       return;
     }
@@ -50,39 +59,28 @@
         const commentSize = resizeToFit(comment.width, comment.height, pipCanvas.width, pipCanvas.height);
         pipContext.drawImage(comment, 0, 0, comment.width, comment.height, (pipCanvas.width - commentSize.width) / 2, (pipCanvas.height - commentSize.height) / 2, commentSize.width, commentSize.height);
       }
-      console.log("[NicoPiP] Rendered video" + (commentEnabled ? " and comment" : ""));
     }
 
     if (isPiPActive && !pipVideo.paused) {
       requestAnimationFrame(updatePiP);
-    } else {
-      console.log("[NicoPiP] Paused or inactive, waiting...");
     }
   }
 
   function promiseWithTimeout(promise, timeoutMs) {
-    return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeoutMs))]);
+    return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeoutMs)]);
   }
 
   function togglePiP() {
-    console.log("[NicoPiP] Toggling PiP...");
     const video = document.querySelector(videoSelector);
-    if (!video) {
-      console.error("[NicoPiP] Video not found");
-      return;
-    }
-
-    console.log("[NicoPiP] Video found, paused:", video.paused, "currentTime:", video.currentTime);
+    if (!video) return;
 
     if (!document.pictureInPictureElement) {
       if (video.hasAttribute("disablepictureinpicture")) {
         video.removeAttribute("disablepictureinpicture");
-        console.log("[NicoPiP] Removed disablePictureInPicture attribute");
       }
 
       if (commentEnabled) {
         if (!pipCanvas) {
-          console.log("[NicoPiP] Initializing canvas and pipVideo...");
           pipCanvas = document.createElement("canvas");
           pipCanvas.width = 800;
           pipCanvas.height = 450;
@@ -92,77 +90,52 @@
           pipVideo.autoplay = true;
           try {
             pipVideo.srcObject = pipCanvas.captureStream(FPS);
-            console.log("[NicoPiP] Canvas stream set successfully");
           } catch (err) {
-            console.error("[NicoPiP] Failed to set canvas stream:", err.name, err.message);
+            console.error("[NicoPiP] Failed to set canvas stream:", err);
             return;
           }
           pipVideo.addEventListener("leavepictureinpicture", () => {
             isPiPActive = false;
             updateId++;
-            console.log("[NicoPiP] Left PiP mode");
           });
           pipVideo.addEventListener("play", () => {
-            console.log("[NicoPiP] pipVideo play event triggered");
             if (isPiPActive) {
-              video.play().catch(err => console.error("[NicoPiP] Video play sync failed:", err.message));
+              video.play().catch(err => console.error("[NicoPiP] Video play sync failed:", err));
               requestAnimationFrame(updatePiP);
             }
           });
           pipVideo.addEventListener("pause", (e) => {
-            const isPiPInternal = e.isTrusted && !e.synthetic;
-            console.log(`[NicoPiP] pipVideo pause event triggered (${isPiPInternal ? "PiP internal" : "custom"})`);
             if (isPiPActive && pipVideo.paused) {
               video.pause();
-              console.log("[NicoPiP] Synced video pause");
             }
           });
           pipVideo.addEventListener("playing", () => {
-            console.log("[NicoPiP] pipVideo playing event (PiP internal)");
             if (isPiPActive) requestAnimationFrame(updatePiP);
           });
         }
 
         const startPiP = async () => {
           isPiPActive = true;
-          console.log("[NicoPiP] Starting initial rendering...");
           updatePiP();
           await new Promise(resolve => setTimeout(resolve, 100));
 
-          console.log("[NicoPiP] Attempting to play pipVideo...");
           try {
             if (pipVideo.paused) {
               await promiseWithTimeout(pipVideo.play(), 2000);
             }
-            console.log("[NicoPiP] pipVideo started playing");
-            console.log("[NicoPiP] Requesting PiP with canvas...");
             try {
               await promiseWithTimeout(pipVideo.requestPictureInPicture(), 2000);
-              console.log("[NicoPiP] PiP started successfully with canvas");
             } catch (err) {
-              console.error("[NicoPiP] PiP failed with canvas:", err.message);
-              console.log("[NicoPiP] Falling back to direct PiP...");
               await video.requestPictureInPicture();
-              console.log("[NicoPiP] Direct PiP started successfully");
             }
           } catch (err) {
-            console.error("[NicoPiP] pipVideo play failed:", err.message);
-            console.log("[NicoPiP] Falling back to direct PiP...");
             await video.requestPictureInPicture();
-            console.log("[NicoPiP] Direct PiP started successfully");
           }
         };
 
         if (video.paused && video.currentTime === 0) {
-          console.log("[NicoPiP] Video is paused, attempting to play...");
-          video.play()
-            .then(() => {
-              console.log("[NicoPiP] Video playing, starting PiP...");
-              startPiP();
-            })
-            .catch(err => console.error("[NicoPiP] Play failed:", err.name, err.message));
+          video.play().then(startPiP).catch(err => console.error("[NicoPiP] Play failed:", err));
         } else {
-          console.log("[NicoPiP] Video is ready, starting PiP...");
           startPiP();
         }
       } else {
@@ -170,22 +143,14 @@
           isPiPActive = true;
           try {
             await promiseWithTimeout(video.requestPictureInPicture(), 2000);
-            console.log("[NicoPiP] PiP started successfully with video (no comments)");
           } catch (err) {
-            console.error("[NicoPiP] PiP failed with video:", err.message);
+            console.error("[NicoPiP] PiP failed with video:", err);
           }
         };
 
         if (video.paused && video.currentTime === 0) {
-          console.log("[NicoPiP] Video is paused, attempting to play...");
-          video.play()
-            .then(() => {
-              console.log("[NicoPiP] Video playing, starting PiP...");
-              startPiP();
-            })
-            .catch(err => console.error("[NicoPiP] Play failed:", err.name, err.message));
+          video.play().then(startPiP).catch(err => console.error("[NicoPiP] Play failed:", err));
         } else {
-          console.log("[NicoPiP] Video is ready, starting PiP...");
           startPiP();
         }
       }
@@ -193,16 +158,14 @@
       document.exitPictureInPicture()
         .then(() => {
           isPiPActive = false;
-          console.log("[NicoPiP] Exited PiP");
         })
-        .catch(err => console.error("[NicoPiP] Exit PiP failed:", err.name, err.message));
+        .catch(err => console.error("[NicoPiP] Exit PiP failed:", err));
     }
   }
 
   function addPiPButton() {
     const container = document.querySelector(buttonContainerSelector);
     if (!container) {
-      console.log("[NicoPiP] Button container not found, retrying...");
       setTimeout(addPiPButton, 500);
       return;
     }
@@ -214,7 +177,7 @@
     button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg>`;
     button.title = "[非公式] PiP";
     button.style.cssText = `
-      background: rgba(255, 255, 255, 0); /* 黒に戻し、透明度下げ */
+      background: rgba(255, 255, 255, 0);
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -223,32 +186,27 @@
       display: inline-block;
       vertical-align: middle;
     `;
-    button.addEventListener("click", () => {
-      console.log("[NicoPiP] Button clicked");
-      togglePiP();
-    });
+    button.addEventListener("click", togglePiP);
 
     commentToggleButton = document.createElement("button");
     commentToggleButton.className = "pip-comment-toggle";
     commentToggleButton.textContent = commentEnabled ? "コメOff" : "コメOn";
     commentToggleButton.style.cssText = `
-      color: white; /* 文字色を白に */
+      color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      padding: 2px 5px; /* 小さく */
+      padding: 2px 5px;
       margin-left: 5px;
       display: inline-block;
       vertical-align: middle;
-      font-size: 12px; /* 小さく */
+      font-size: 12px;
     `;
     commentToggleButton.addEventListener("click", () => {
       commentEnabled = !commentEnabled;
       commentToggleButton.textContent = commentEnabled ? "コメOff" : "コメOn";
-      console.log("[NicoPiP] Comment display toggled:", commentEnabled);
       if (isPiPActive) {
         document.exitPictureInPicture().then(() => {
-          console.log("[NicoPiP] Restarting PiP with new comment setting...");
           togglePiP();
         });
       }
@@ -262,14 +220,18 @@
       container.appendChild(button);
       container.appendChild(commentToggleButton);
     }
-    console.log("[NicoPiP] Buttons added");
   }
 
-  addPiPButton();
+  // ページ読み込み完了後にボタンを追加
+  if (document.readyState === "complete") {
+    addPiPButton();
+  } else {
+    window.addEventListener("load", addPiPButton);
+  }
 
+  // DOM変更監視
   const observer = new MutationObserver(() => {
     if (!document.querySelector(".pip-button")) {
-      console.log("[NicoPiP] Buttons removed, re-adding...");
       addPiPButton();
     }
   });
