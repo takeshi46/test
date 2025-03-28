@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         NicoPiP with Comment Toggle
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  Nico Nico Douga PiP with comment toggle
+// @version      0.3
+// @description  Nico Nico Douga PiP with comment toggle (Mobile Compatible)
 // @author       You
 // @match        https://sp.nicovideo.jp/watch/*
 // @grant        none
@@ -210,6 +210,7 @@
   }
 
   function addPiPButton() {
+    console.log("[NicoPiP] Attempting to add buttons...");
     const container = document.querySelector(buttonContainerSelector);
     if (!container) {
       console.log("[NicoPiP] Button container not found, retrying...");
@@ -217,14 +218,17 @@
       return;
     }
 
-    if (container.querySelector(".pip-button")) return;
+    if (container.querySelector(".pip-button")) {
+      console.log("[NicoPiP] Buttons already exist");
+      return;
+    }
 
     const button = document.createElement("button");
     button.className = "pip-button";
     button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg>`;
     button.title = "[非公式] PiP";
     button.style.cssText = `
-      background: rgba(0, 0, 0, 0.5); /* 黒に戻し、透明度下げ */
+      background: rgba(0, 0, 0, 0.5);
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -242,15 +246,15 @@
     commentToggleButton.className = "pip-comment-toggle";
     commentToggleButton.textContent = commentEnabled ? "コメOff" : "コメOn";
     commentToggleButton.style.cssText = `
-      color: white; /* 文字色を白に */
+      color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      padding: 2px 5px; /* 小さく */
+      padding: 2px 5px;
       margin-left: 5px;
       display: inline-block;
       vertical-align: middle;
-      font-size: 12px; /* 小さく */
+      font-size: 12px;
     `;
     commentToggleButton.addEventListener("click", () => {
       commentEnabled = !commentEnabled;
@@ -272,16 +276,23 @@
       container.appendChild(button);
       container.appendChild(commentToggleButton);
     }
-    console.log("[NicoPiP] Buttons added");
+    console.log("[NicoPiP] Buttons added successfully");
   }
 
-  addPiPButton();
-
-  const observer = new MutationObserver(() => {
-    if (!document.querySelector(".pip-button")) {
-      console.log("[NicoPiP] Buttons removed, re-adding...");
+  // 初期化を遅延させ、DOMが確実に準備されるのを待つ
+  function init() {
+    console.log("[NicoPiP] Script initialized");
+    setTimeout(() => {
       addPiPButton();
-    }
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector(".pip-button")) {
+          console.log("[NicoPiP] Buttons removed, re-adding...");
+          addPiPButton();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }, 1000); // 1秒遅延でDOMロードを待つ
+  }
+
+  init();
 })();
